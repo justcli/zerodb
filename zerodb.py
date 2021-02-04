@@ -6,16 +6,31 @@ global __flushfp
 __flushfp = None
 
 def cleanup(arg):
-    arg._dbfp.flush()
-    arg._dbfp.close()
+    import shutil
+    import os
+    if arg._reconciling:
+        if os.path.exists(arg._bkup_file):
+            try:
+                arg._dbfile.close()
+            except Exception:
+                pass
+            shutil.copy(arg._bkup_file, arg._dbfile)
+            os.remove(arg._re_file)
+    else:
+        arg._dbfp.flush()
+        arg._dbfp.close()
 
 
 class ZeroDB:
 
     def __init__(self, dbfile):
         global old_exception_handler
+        self._dbfile = dbfile
         self._objlist = []
         self._objmap = {}
+        self._locmap = {}
+        self._adds = self._subs = 0
+        self._reconciling = 0
         atexit.register(cleanup, self)
 
         try:
@@ -38,21 +53,41 @@ class ZeroDB:
             except KeyError:
                 n = None
             if n is None and action == '+':
+                self._adds += 1
                 d = {}
                 d[alias] = [value]
                 self._objlist.append(d)
                 self._objmap[alias] = len(self._objlist) - 1
+                self._locmap[alias] = self._dbfp.tell() - len(line)
             else:
                 if action == '+':
+                    self._adds += 1
                     curr = self._objlist[n][alias]
                     curr.append(value)
                 else:
+                    self._subs += 1
                     self._objlist.pop(n)
                     del self._objmap[alias]
             action = None
-
-        global __flushfp
-        __flushfp = self._dbfp
+        import shutil
+        import os
+        self._bkup_file = os.path.dirname(self._dbfile) + '/' + self._dbfile + '.bkup'
+        self._re_file = os.path.dirname(self._dbfile) + '/' + self._dbfile + '.tmp'
+        self._reconciling = 1
+        self._reconcile_db(self._re_file)
+        self._dbfp.close()
+        try:
+            shutil.copyfile(self._dbfile, self._bkup_file)
+            shutil.copyfile(self._re_file, self._dbfile)
+        except Exception:
+            cleanup(self)
+            self._reconciling = 2
+        if self._reconciling == 1:
+            os.remove(self._bkup_file)
+            os.remove(self._re_file)
+        self._dbfp = open(dbfile, "a+")
+        self._dbfp.seek(2)
+        self._reconciling = 0
 
 
     def insert(self, key: str, val: any):
@@ -92,19 +127,31 @@ class ZeroDB:
     def flush(self):
         self._dbfp.flush()
 
+    def _reconcile_db(self, refile):
+        if self._subs and (self._adds // self._subs) > 20:
+            return
+        with open(refile, 'w') as fp:
+            for alias in self._objmap:
+                loc = self._locmap[alias]
+                self._dbfp.seek(loc, 0)
+                line = self._dbfp.readline()
+                line = '+\n' + line
+                fp.write(line)
+        self._dbfp.seek(2)
+
 
 
 if __name__ == '__main__':
     import time
     s = time.time()
     mydb = ZeroDB('./mydb.zdb')
-    #for i in range(500000):
-    #   d = {}
-    #   d['mykey'] = 'myval'
-    #   d['mylist'] = [1,2,3,4,5]
-    #   alias = 'dictionary' + str(i)
-    #   mydb.insert(alias, d)
     e = time.time()
+    for i in range(200):
+        d = {}
+        d['mykey'] = 'myval'
+        d['mylist'] = [1,2,3,4,5]
+        alias = 'dictionary' + str(i)
+        #mydb.remove(alias)
     #d = {'a':2, 'b': [2,2], 'c':'d'}
     #mydb.insert('mylist', d)
     #d = {'a':2, 'b': [2,2], 'c':'d'}
