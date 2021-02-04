@@ -1,35 +1,26 @@
 import sys
 import json
+import atexit
 
 global __flushfp
 __flushfp = None
-print(f'__flushfp(global):{__flushfp} : {id(__flushfp)}')
 
-def zerodb_excepthook(ex, msg, bt):
-    global __flushfp, old_exception_handler
-    print("Exception")
-    # flush the db file
-    if __flushfp:
-        __flushfp.write(']')
-        __flushfp.flush()
-        __flushfp.close()
-    old_exception_handler(ex, msg, bt)
+def cleanup(arg):
+    arg._dbfp.flush()
+    arg._dbfp.close()
 
 
 class ZeroDB:
 
     def __init__(self, dbfile):
         global old_exception_handler
-        old_exception_handler = sys.excepthook
-        sys.excepthook = zerodb_excepthook
         self._objlist = []
         self._objmap = {}
+        atexit.register(cleanup, self)
+
         try:
             self._dbfp = open(dbfile, "a+")
             self._dbfp.seek(0)
-            global __flushfp
-            __flushfp = self._dbfp
-            print(f'__flushfp:{__flushfp} : {id(__flushfp)}')
         except Exception:
             print(f'Error opening the db file {dbfile}', file=sys.stderr)
             return None
@@ -40,8 +31,6 @@ class ZeroDB:
                 action = line[0]
                 continue
             obj = json.loads(line.strip())
-            # every object in db is a key:value pair where key is the 
-            # user given alias and value is the user object/data
             alias = list(obj.keys())[0]
             value = obj[alias]
             try:
@@ -58,26 +47,25 @@ class ZeroDB:
                     curr = self._objlist[n][alias]
                     curr.append(value)
                 else:
-                    #self._objlist[n][alias].remove(value)
                     self._objlist.pop(n)
                     del self._objmap[alias]
             action = None
 
+        global __flushfp
+        __flushfp = self._dbfp
+
 
     def insert(self, key: str, val: any):
         d = {}
-        d[key] = val
+        d[key] = [val]
         if key in self._objmap:
             n = self._objmap[key]
-            print(self._objlist[n][key])
             self._objlist[n][key].append(val)
         else:
             self._objlist.append(d)
             self._objmap[key] = len(self._objlist) - 1
-        # now write it to the file
-        self._dbfp.write('+\n')
         txt = json.dumps(d)
-        self._dbfp.write(txt + '\n')
+        self._dbfp.write('+\n' + txt + '\n')
 
 
     def remove(self, key: str):
@@ -87,9 +75,7 @@ class ZeroDB:
             return
         d = self._objlist.pop(n)
         del self._objmap[key]
-        self._dbfp.write('-\n')
-        self._dbfp.write(json.dumps(d) + '\n')
-        self._dbfp.flush()
+        self._dbfp.write('-\n' + json.dumps(d) + '\n')
 
 
     def query(self, key: str):
@@ -107,25 +93,25 @@ class ZeroDB:
         self._dbfp.flush()
 
 
+
 if __name__ == '__main__':
     import time
-    mydb = ZeroDB('./mydb.zdb')
     s = time.time()
-    #d = mydb.remove('dictionary9999')
-    #d = mydb.query('dictionary9999')
-    #for i in range(1000000):
+    mydb = ZeroDB('./mydb.zdb')
+    #for i in range(500000):
     #   d = {}
     #   d['mykey'] = 'myval'
     #   d['mylist'] = [1,2,3,4,5]
     #   alias = 'dictionary' + str(i)
     #   mydb.insert(alias, d)
-    #d = {'a':1, 'b': [1,2], 'c':'a'}
-    #mydb.insert('mylist', d)
-    d = {'a':2, 'b': [2,2], 'c':'d'}
-    mydb.insert('mylist', d)
-    d = mydb.query('mylist')
     e = time.time()
-    print(d[0])
+    #d = {'a':2, 'b': [2,2], 'c':'d'}
+    #mydb.insert('mylist', d)
+    #d = {'a':2, 'b': [2,2], 'c':'d'}
+    #mydb.insert('mylist', d)
+    #mydb.remove('mylist')
+    d = mydb.query('mylist')
+    print(d)
     print(s)
     print(e)
 
