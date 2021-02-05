@@ -1,3 +1,4 @@
+i#!/usr/bin/env python3
 import sys
 import json
 import os
@@ -9,17 +10,8 @@ global __flushfp
 __flushfp = None
 
 def cleanup(arg):
-    if arg._reconciling:
-        if os.path.exists(arg._bkup_file):
-            try:
-                arg._dbfile.close()
-            except Exception:
-                pass
-            shutil.copy(arg._bkup_file, arg._dbfile)
-            os.remove(arg._re_file)
-    else:
-        arg._dbfp.flush()
-        arg._dbfp.close()
+    arg._dbfp.flush()
+    arg._dbfp.close()
 
 
 def timestamp() -> str:
@@ -29,8 +21,11 @@ def timestamp() -> str:
 
 def expired(stamp, age) -> int:
     from datetime import datetime, timedelta
-    if not age:
-        return 0
+    try:
+        if not int(age[:-1]):
+            return 0
+    except Exception:
+        return -1
     n = unit = None
     fmt = '%Y-%m-%d %H:%M:%S'
     try:
@@ -59,14 +54,6 @@ def expired(stamp, age) -> int:
 
 
 #def parse_cond(cond: str) -> dict:
-#    '''
-#    cond: str examples -
-#    -   'name == Mohan'
-#    -   'grade.students.passed == yes'
-#    -   'name == 'A' and age == 10'
-#    -   'name in [Ram, Mohan, Shyam]'
-#    -   'name not in [John, Donald]'
-#    '''
 #    slice = cond
 #    while True:
 #        first = None
@@ -110,8 +97,7 @@ class ZeroDB:
         self._objmap = {}
         self._locmap = {}
         self._adds = self._subs = 0
-        self._reconciling = 0
-        self._expiry = expiry
+        self._expiry = '0h' if not expiry else expiry
 
         if not file:
             return
@@ -119,12 +105,18 @@ class ZeroDB:
         try:
             self._dbfp = open(self._dbfile, "a+")
             self._dbfp.seek(0)
+            line = self._dbfp.readline()
+            if not line:
+                self._dbfp.write(self._expiry + '\n')
+            else:
+                self._expiry = line.strip()
         except Exception:
-            print(f'Error opening the db file ({self._dbfile})', file=sys.stderr)
+            print(f'Error opening the db file ({self._dbfile})',
+                  file=sys.stderr)
             exit(1)
 
         action = None
-        atexit.register(cleanup, self)
+        #atexit.register(cleanup, self)
         while line := self._dbfp.readline():
             if not action:
                 action = line
@@ -158,6 +150,15 @@ class ZeroDB:
                     self._objlist.pop(n)
                     del self._objmap[alias]
             action = None
+        try:
+            x = (self._subs * 100) // (self._adds + self._subs)
+            if x > 20:
+                print(f'{os.path.basename(self._dbfile)} can be compacted by \
+                      more than {x}%. You may run "zerodb -tidyup \
+                      <db filename>"')
+        except Exception:
+            pass
+
 
 
     def insert(self, key: str, val: any):
@@ -199,63 +200,68 @@ class ZeroDB:
     def flush(self):
         self._dbfp.flush()
 
-    def reconcile(self):
-        self._bkup_file = os.path.dirname(self._dbfile) +\
-                          '/' + self._dbfile + '.bkup'
-        self._re_file = os.path.dirname(self._dbfile) +\
-                        '/' + self._dbfile + '.tmp'
-        self._reconciling = 1
-        # reconcile removed entries
-        if self._subs and (self._adds // self._subs) < 20:
-            with open(self._re_file, 'w') as fp:
-                for alias in self._objmap:
-                    loc = self._locmap[alias]
-                    self._dbfp.seek(loc, 0)
-                    line = self._dbfp.readline()
-                    line = '+\n' + line
-                    fp.write(line)
+    def tidyup(self, outfile=sys.stdout):
+        # tidyup removed entries
+        self._dbfp.seek(0)
+        expiry = self._dbfp.readline().strip()
+        action = None
+        while line := self._dbfp.readline():
+            if not action:
+                action = line
+                continue
+            if action[0] == '-':
+                action = None
+                continue
+            if action[0] == '+':
+                obj = json.loads(line.strip())
+                alias = list(obj.keys())[0]
+                if alias not in self._objmap:
+                    action = None
+                    continue
+                if not expired(action[1:].strip(), expiry):
+                    outfile.write(action + line)
         self._dbfp.close()
-        if self._subs:
-            try:
-                shutil.copyfile(self._dbfile, self._bkup_file)
-                shutil.copyfile(self._re_file, self._dbfile)
-            except Exception:
-                cleanup(self)
-            if self._reconciling == 1:
-                os.remove(self._bkup_file)
-                os.remove(self._re_file)
-        self._dbfp = open(self._dbfile, "a+")
-        self._dbfp.seek(2)
-        self._reconciling = 0
-
 
 
 
 if __name__ == '__main__':
-    if len(sys.argv) != 3 or sys.argv[1] != '-tidyup':
+    '''
+    zerodb -tidyup <db file>  [<output file>]
+    '''
+    mydb = ZeroDB()
+    s = time.time()
+    nr = 100000
+    for i in range(nr):
+        d = {'a': 'aaaaa', 'b': [1,2,3,4,5]}
+        mydb.insert('key' + str(i), d)
+    e = time.time()
+    diff = float(e) - float(s)
+    print('In-memory : ' + str(int(nr // diff)) + ' inserts / sec')
+    mydb = ZeroDB('mydb.zdb')
+    s = time.time()
+    nr = 100000
+    for i in range(nr):
+        d = {'a': 'aaaaa', 'b': [1,2,3,4,5]}
+        mydb.insert('key' + str(i), d)
+    e = time.time()
+    diff = float(e) - float(s)
+    print('Storage   : ' + str(int(nr // diff)) + ' inserts / sec')
+    exit(0)
+    if len(sys.argv) < 3 or len(sys.argv) > 4 or sys.argv[1] != '-tidyup':
         print('Usage:\n> zerodb -tidyup <db filename>')
         exit(1)
- 
-    mydb = ZeroDB(sys.argv[2])
-    s = time.time()
-    mydb.reconcile()
-    #mydb = ZeroDB('./mydb.zdb', expiry='1h')
-    #e = time.time()
-    #for i in range(200):
-    #    d = {}
-    #    d['mykey'] = 'myval'
-    #    d['mylist'] = [1,2,3,4,5]
-    #    alias = 'dictionary' + str(i)
-        #mydb.remove(alias)
-    #d = {'a':2, 'b': [2,2], 'c':'d'}
-    #mydb.insert('mylist', d)
-    #d = {'a':2, 'b': [2,2], 'c':'d'}
-    #mydb.insert('mylist', d)
-    #mydb.remove('mylist')
-    d = mydb.query('key1')
-    print(d)
-    d = mydb.query('key2')
-    print(d)
-    print(s)
-    print(e)
+
+    try:
+        mydb = ZeroDB(os.path.abspath(sys.argv[2]))
+        dir = None
+        fp = sys.stdout
+        if len(sys.argv) == 4:
+            dir = os.path.dirname(os.path.abspath(sys.argv[3]))
+        print(dir)
+        with open(sys.argv[3], 'w+') as fp:
+            mydb.tidyup(fp)
+    except Exception as e:
+        print(e, file=sys.stderr)
+        exit(1)
+    exit(0)
 
