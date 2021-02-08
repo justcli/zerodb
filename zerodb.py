@@ -1,4 +1,4 @@
-i#!/usr/bin/env python3
+#!/usr/bin/env python3
 import sys
 import json
 import os
@@ -6,12 +6,11 @@ import time
 import shutil
 import atexit
 
-global __flushfp
-__flushfp = None
 
 def cleanup(arg):
-    arg._dbfp.flush()
-    arg._dbfp.close()
+    if arg._dbfp:
+        arg._dbfp.flush()
+        arg._dbfp.close()
 
 
 def timestamp() -> str:
@@ -52,6 +51,29 @@ def expired(stamp, age) -> int:
         return 0
     return 1
 
+
+def run_where(qstr: str) -> any:
+    '''
+    E.g.
+    - data is a dict
+        mydb.insert("student1",{'age': 20, 'grade': 'A'})
+        mydb.query(select='student1')
+        mydb.query(select='student1.age')
+    - data is a list of dicts
+        mydb.insert("students",{'name': 'student1','age': 20, 'grade': 'A'})
+        mydb.insert("students",{'name': 'student2','age': 17, 'grade': 'B'})
+        mydb.query(select='*.age', where='*.name == student1')
+        mydb.query(select='*.age', where='*.age  in [16,17]')
+        mydb.query(select='*.age', where='*.age  > 17')
+    '''
+    joins = [' and ', ' or ']
+    evals = [' == ', ' > ', ' >= ', ' < ', ' <= ', ' != ']
+    q = qstr
+    while q:
+         tok = slice(q, joins, nr=1)
+         q = tok[1]
+         tok = tok[0]
+         
 
 #def parse_cond(cond: str) -> dict:
 #    slice = cond
@@ -116,7 +138,7 @@ class ZeroDB:
             exit(1)
 
         action = None
-        #atexit.register(cleanup, self)
+        atexit.register(cleanup, self)
         while line := self._dbfp.readline():
             if not action:
                 action = line
@@ -200,10 +222,12 @@ class ZeroDB:
     def flush(self):
         self._dbfp.flush()
 
+
     def tidyup(self, outfile=sys.stdout):
         # tidyup removed entries
         self._dbfp.seek(0)
         expiry = self._dbfp.readline().strip()
+        outfile.write(expiry + '\n')
         action = None
         while line := self._dbfp.readline():
             if not action:
@@ -220,7 +244,9 @@ class ZeroDB:
                     continue
                 if not expired(action[1:].strip(), expiry):
                     outfile.write(action + line)
+            action = None
         self._dbfp.close()
+        self._dbfp = None
 
 
 
@@ -228,40 +254,43 @@ if __name__ == '__main__':
     '''
     zerodb -tidyup <db file>  [<output file>]
     '''
-    mydb = ZeroDB()
-    s = time.time()
-    nr = 100000
-    for i in range(nr):
-        d = {'a': 'aaaaa', 'b': [1,2,3,4,5]}
-        mydb.insert('key' + str(i), d)
-    e = time.time()
-    diff = float(e) - float(s)
-    print('In-memory : ' + str(int(nr // diff)) + ' inserts / sec')
-    mydb = ZeroDB('mydb.zdb')
-    s = time.time()
-    nr = 100000
-    for i in range(nr):
-        d = {'a': 'aaaaa', 'b': [1,2,3,4,5]}
-        mydb.insert('key' + str(i), d)
-    e = time.time()
-    diff = float(e) - float(s)
-    print('Storage   : ' + str(int(nr // diff)) + ' inserts / sec')
-    exit(0)
-    if len(sys.argv) < 3 or len(sys.argv) > 4 or sys.argv[1] != '-tidyup':
-        print('Usage:\n> zerodb -tidyup <db filename>')
-        exit(1)
+    if len(sys.argv) == 2 and sys.argv[1] == '-benchmark':
+        mydb = ZeroDB()
+        s = time.time()
+        nr = 100000
+        for i in range(nr):
+            d = {'a': 'aaaaa', 'b': [1,2,3,4,5]}
+            mydb.insert('key' + str(i), d)
+        e = time.time()
+        diff = float(e) - float(s)
+        print('In-memory : ' + str(int(nr // diff)) + ' inserts / sec')
+        mydb = ZeroDB('mydb.zdb')
+        s = time.time()
+        nr = 100000
+        for i in range(nr):
+            d = {'a': 'aaaaa', 'b': [1,2,3,4,5]}
+            mydb.insert('key' + str(i), d)
+        e = time.time()
+        diff = float(e) - float(s)
+        print('Storage   : ' + str(int(nr // diff)) + ' inserts / sec')
 
-    try:
-        mydb = ZeroDB(os.path.abspath(sys.argv[2]))
-        dir = None
-        fp = sys.stdout
-        if len(sys.argv) == 4:
-            dir = os.path.dirname(os.path.abspath(sys.argv[3]))
-        print(dir)
-        with open(sys.argv[3], 'w+') as fp:
+    else:
+
+        if len(sys.argv) < 3 or len(sys.argv) > 4 or sys.argv[1] != '-tidyup':
+            print('Usage:\n> zerodb -tidyup <db filename> <output filename>')
+            exit(1)
+
+        try:
+            mydb = ZeroDB(os.path.abspath(sys.argv[2]))
+            dir = None
+            fp = sys.stdout
+            if len(sys.argv) == 4:
+                fp = open(sys.argv[3], 'w+')
+                #dir = os.path.dirname(os.path.abspath(sys.argv[3]))
             mydb.tidyup(fp)
-    except Exception as e:
-        print(e, file=sys.stderr)
-        exit(1)
+            fp.close()
+        except Exception as e:
+            print(e, file=sys.stderr)
+            exit(1)
     exit(0)
 
