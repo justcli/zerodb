@@ -70,10 +70,10 @@ def run_where(qstr: str) -> any:
     evals = [' == ', ' > ', ' >= ', ' < ', ' <= ', ' != ']
     q = qstr
     while q:
-         tok = slice(q, joins, nr=1)
-         q = tok[1]
-         tok = tok[0]
-         
+        tok = slice(q, joins, nr=1)
+        q = tok[1]
+        tok = tok[0]
+
 
 #def parse_cond(cond: str) -> dict:
 #    slice = cond
