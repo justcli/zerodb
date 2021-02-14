@@ -114,7 +114,6 @@ class ZeroDB:
 
     def __init__(self, file=None, expiry=None):
         global old_exception_handler
-        self._dbfile = file
         self._objlist = []
         self._objmap = {}
         self._locmap = {}
@@ -123,6 +122,7 @@ class ZeroDB:
 
         if not file:
             return
+        self._dbfile = os.path.expanduser(file)
 
         try:
             self._dbfp = open(self._dbfile, "a+")
