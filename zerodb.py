@@ -114,6 +114,7 @@ class ZeroDB:
 
     def __init__(self, file=None, expiry=None):
         global old_exception_handler
+        self._dbfile = file
         self._objlist = []
         self._objmap = {}
         self._locmap = {}
