@@ -75,3 +75,6 @@ In-memory : 276480 inserts / sec
 Storage   : 84142 inserts / sec
 ```
 
+## Ongoing features
+Advanced Query :
+I am working on adding advanced querying support to it. It will be in *select that where this* format. It will allow querying complex json data in an intuitive and simple way.
