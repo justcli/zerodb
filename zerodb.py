@@ -52,64 +52,6 @@ def expired(stamp, age) -> int:
     return 1
 
 
-def run_where(qstr: str) -> any:
-    '''
-    E.g.
-    - data is a dict
-        mydb.insert("student1",{'age': 20, 'grade': 'A'})
-        mydb.query(select='student1')
-        mydb.query(select='student1.age')
-    - data is a list of dicts
-        mydb.insert("students",{'name': 'student1','age': 20, 'grade': 'A'})
-        mydb.insert("students",{'name': 'student2','age': 17, 'grade': 'B'})
-        mydb.query(select='*.age', where='*.name == student1')
-        mydb.query(select='*.age', where='*.age  in [16,17]')
-        mydb.query(select='*.age', where='*.age  > 17')
-    '''
-    joins = [' and ', ' or ']
-    evals = [' == ', ' > ', ' >= ', ' < ', ' <= ', ' != ']
-    q = qstr
-    while q:
-        tok = slice(q, joins, nr=1)
-        q = tok[1]
-        tok = tok[0]
-
-
-#def parse_cond(cond: str) -> dict:
-#    slice = cond
-#    while True:
-#        first = None
-#        offset = 9999
-#        jmp = 0
-#        s_and = slice.find(' and ') + 1
-#        if s_and:
-#            first = 'and'
-#            offset = s_and - 1
-#            jmp = 5
-#        s_or = slice.find(' or ') + 1
-#        if s_or and s_or < offset:
-#            first = 'or'
-#            offset = s_or - 1
-#            jmp = 4
-#        s_in = slice.find(' in ') + 1
-#        if s_in and s_in < offset:
-#            first = 'in'
-#            offset = s_in - 1
-#            jmp = 4
-#        s_notin = slice.find(' not in ') + 1
-#        if s_notin and s_notin < offset:
-#            first = 'not in'
-#            offset = s_notin - 1
-#            jmp = 8
-#
-#        if first is None:
-#            return {}
-#
-#        left = slice[:offset]
-#        slice = slice[offset + jmp:]
-#        curr_cond['left'] = left
-#        curr_cond['joint'] = first
-
 class ZeroDB:
 
     def __init__(self, file=None, expiry=None):
@@ -221,11 +163,14 @@ class ZeroDB:
 
 
     def flush(self):
-        self._dbfp.flush()
+        if self._dbfile:
+            self._dbfp.flush()
 
 
     def tidyup(self, outfile=sys.stdout):
         # tidyup removed entries
+        if not self._dbfile:
+            return
         self._dbfp.seek(0)
         expiry = self._dbfp.readline().strip()
         outfile.write(expiry + '\n')
