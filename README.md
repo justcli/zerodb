@@ -1,5 +1,5 @@
 # zerodb
-**zerodb** is a NoSQL, storage-supported, fast embedded database. It is like NoSQL version of sqlite. It currently support only Python language. It is uitable for Python applications that need sqlite-like database but much faster and with storage support. The database can store any json data. All the data is maintained in the memory. The data is also backed to a file if the user needs storage support. The database gurantees safety of the storage file against application crash.
+**zerodb** is a NoSQL, storage-supported, fast embedded database. It is like MongoDB but an embedded (in-process) database like SQLite. It currently support only Python language. It is uitable for Python applications that need sqlite-like database but much faster and with storage support. The database can store any json data. All the data is maintained in the memory. The data is also backed to a file if the user needs storage support. The database gurantees safety of the storage file against application crash.
 
 ## Installation
 You can install zerodb by cloning the repo.
