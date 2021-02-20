@@ -5,6 +5,41 @@ import os
 import time
 import shutil
 import atexit
+import msgpack
+from io import BytesIO
+
+__all__ = ['ZeroDB']
+
+def compile_n_run(raw, condition, dump=False):
+    rsp = {
+        'retcode': 0,
+        'msg' : None
+    }
+    try:
+        rsp_dict = json.loads(raw)
+        code = ('import os\n'
+                + 'raw=' + str(rsp_dict) + '\n'
+                + 'data=' + str(rsp_dict['data']) + '\n'
+                + 'header=' + str(rsp_dict['header']) + '\n'
+                + 'status_code=' + '\"' + str(rsp_dict['status_code']) + '\"\n'
+                + 'reason_phrase=' + '\"'
+                                + str(rsp_dict['reason_phrase']) + '\"\n'
+                + 'http_version=' + '\"' + str(rsp_dict['http_version'])
+                                + '\"\n'
+                + 'os.environ[\'unicorn\']=str(' + condition + ')\n')
+        print(code)
+        pycode = compile(code, '', 'exec')
+        exec(pycode)
+        res = os.environ['unicorn']
+        rsp['retcode'] = 0
+        if not dump and (res == 'False'):
+            rsp['retcode'] = -1
+        if dump:
+            rsp['msg'] = res
+    except Exception as e:
+        rsp['retcode'] = -1
+        rsp['msg'] = str(e)
+    return rsp
 
 
 def cleanup(arg):
@@ -59,7 +94,6 @@ class ZeroDB:
         self._dbfile = file
         self._objlist = []
         self._objmap = {}
-        self._locmap = {}
         self._adds = self._subs = 0
         self._expiry = '0h' if not expiry else expiry
 
@@ -68,53 +102,35 @@ class ZeroDB:
         self._dbfile = os.path.expanduser(file)
 
         try:
-            self._dbfp = open(self._dbfile, "a+")
+            self._dbfp = open(self._dbfile, "ab+")
             self._dbfp.seek(0)
-            line = self._dbfp.readline()
-            if not line:
-                self._dbfp.write(self._expiry + '\n')
-            else:
-                self._expiry = line.strip()
         except Exception:
             print(f'Error opening the db file ({self._dbfile})',
                   file=sys.stderr)
             exit(1)
 
-        action = None
         atexit.register(cleanup, self)
-        while line := self._dbfp.readline():
-            if not action:
-                action = line
+        myio = BytesIO(self._dbfp.read())
+        it = msgpack.Unpacker(myio, raw=False)
+        for obj in it:
+            if expired(obj['t'], self._expiry):
                 continue
-
-            if expired(action[1:].strip(), self._expiry):
-                action = None
-                continue
-
-            obj = json.loads(line.strip())
-            alias = list(obj.keys())[0]
-            value = obj[alias]
-            try:
-                n = self._objmap[alias]
-            except KeyError:
-                n = None
-            if n is None and action[0] == '+':
-                self._adds += 1
+            if obj['a'] == '+':
                 d = {}
-                d[alias] = [value]
-                self._objlist.append(d)
-                self._objmap[alias] = len(self._objlist) - 1
-                self._locmap[alias] = self._dbfp.tell() - len(line)
-            else:
-                if action[0] == '+':
+                alias = obj['k']
+                try:
+                    n = self._objmap[alias]
+                    self._objlist[n][alias].append(d)
+                except KeyError:
+                    d[alias] = [obj['v']]
+                    self._objlist.append(d)
+                    self._objmap[alias] = len(self._objlist) - 1
                     self._adds += 1
-                    curr = self._objlist[n][alias]
-                    curr.append(value)
-                else:
-                    self._subs += 1
-                    self._objlist.pop(n)
-                    del self._objmap[alias]
-            action = None
+            else:
+                n = self._objmap[alias]
+                alias = obj['k']
+                self._objlist.pop(n)
+                self._subs += 1
         try:
             x = (self._subs * 100) // (self._adds + self._subs)
             if x > 20:
@@ -127,17 +143,22 @@ class ZeroDB:
 
 
     def insert(self, key: str, val: any):
-        d = {}
-        d[key] = [val]
         if key in self._objmap:
             n = self._objmap[key]
             self._objlist[n][key].append(val)
         else:
-            self._objlist.append(d)
+            dat = {}
+            dat[key] = [val]
+            self._objlist.append(dat)
             self._objmap[key] = len(self._objlist) - 1
         if self._dbfile:
-            txt = json.dumps(d)
-            self._dbfp.write('+' + timestamp() + '\n' + txt + '\n')
+            d = {}
+            d['k'] = key
+            d['v'] = val
+            d['a'] = '+'
+            d['t'] = timestamp()
+            self._dbfp.write(msgpack.packb(d, use_bin_type=True))
+
 
 
     def remove(self, key: str):
@@ -147,8 +168,12 @@ class ZeroDB:
             return
         d = self._objlist.pop(n)
         del self._objmap[key]
+        d = {}
+        d['a'] = '-'
+        d['t'] = timestamp()
         if self._dbfile:
-            self._dbfp.write('-\n' + json.dumps(d) + '\n')
+            self._dbfp.write(msgpack.packb(d, use_bin_type=True))
+
 
 
     def query(self, key):
@@ -162,35 +187,51 @@ class ZeroDB:
         return obj
 
 
+
     def flush(self):
         if self._dbfile:
             self._dbfp.flush()
 
 
-    def tidyup(self, outfile=sys.stdout):
+
+    def count(self, key=None) -> int:
+        if not key:
+            return len(self._objlist)
+        if key not in self._objmap:
+            return 0
+        n = self._objmap[key]
+        return len(self._objlist[n][key])
+
+
+
+    def tidyup(self, outfile):
         # tidyup removed entries
         if not self._dbfile:
             return
         self._dbfp.seek(0)
-        expiry = self._dbfp.readline().strip()
-        outfile.write(expiry + '\n')
-        action = None
-        while line := self._dbfp.readline():
-            if not action:
-                action = line
+        curr_list = []
+        filtered = []
+        myio = BytesIO(self._dbfp.read())
+        it = msgpack.Unpacker(myio, raw=False)
+        for obj in it:
+            if expired(obj['t'], self._expiry):
                 continue
-            if action[0] == '-':
-                action = None
-                continue
-            if action[0] == '+':
-                obj = json.loads(line.strip())
-                alias = list(obj.keys())[0]
+            if obj['a'] == '+':
+                alias = obj['k']
+                if alias not in curr_list:
+                    filtered.append(obj)
+                    curr_list[alias] = len(filtered) - 1
+            elif obj['a'] == '-':
+                alias = obj['k']
                 if alias not in self._objmap:
-                    action = None
                     continue
-                if not expired(action[1:].strip(), expiry):
-                    outfile.write(action + line)
-            action = None
+                filtered.remove(obj)
+                curr_list.remove(alias)
+
+        # now dump the filtered data in the outfile
+        with open(outfile, 'wb+') as fp:
+            for obj in filtered:
+                fp.write(msgpack.packb(obj, use_bin_type=True))
         self._dbfp.close()
         self._dbfp = None
 
@@ -200,26 +241,26 @@ if __name__ == '__main__':
     '''
     zerodb -tidyup <db file>  [<output file>]
     '''
+    import gc
+    gc.disable()
     if len(sys.argv) == 2 and sys.argv[1] == '-benchmark':
         mydb = ZeroDB()
         s = time.time()
-        nr = 100000
+        nr = 1000000
         for i in range(nr):
-            d = {'a': 'aaaaa', 'b': [1,2,3,4,5]}
+            d = {'a': i}
             mydb.insert('key' + str(i), d)
         e = time.time()
         diff = float(e) - float(s)
         print('In-memory : ' + str(int(nr // diff)) + ' inserts / sec')
         mydb = ZeroDB('mydb.zdb')
         s = time.time()
-        nr = 100000
         for i in range(nr):
-            d = {'a': 'aaaaa', 'b': [1,2,3,4,5]}
+            d = {'a': i}
             mydb.insert('key' + str(i), d)
         e = time.time()
         diff = float(e) - float(s)
         print('Storage   : ' + str(int(nr // diff)) + ' inserts / sec')
-
     else:
 
         if len(sys.argv) < 3 or len(sys.argv) > 4 or sys.argv[1] != '-tidyup':
