@@ -4,7 +4,7 @@ set -e
 
 which python3 1>/dev/null 2>&1
 if [ $? -ne 0 ];then
-	echo "Currently TDDISH only works with python3"
+	echo "Currently only works with python3"
 	exit 1
 fi
 
