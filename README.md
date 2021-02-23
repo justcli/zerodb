@@ -74,6 +74,14 @@ On my Macbook (Core-i5, 8GB RAM running MacOS Mojave), I get the following resul
 In-memory : 276480 inserts / sec
 Storage   : 84142 inserts / sec
 ```
+**Update**
+
+With gc maipulation, the benchmark on the same hardware is
+```
+> zerodb -benchmark
+In-memory : 724417 inserts / sec
+Storage   : 176143 inserts / sec
+```
 
 ## Ongoing feature
 Advanced Query : I am working on adding advanced querying support to it. It will be in *select that where this* format. It will allow querying complex json data in an intuitive and simple way.
