@@ -285,8 +285,7 @@ if __name__ == '__main__':
                     for val in vals:
                         print(val)
                 else:
-                    # vals = val
-                    print(vals)
+                    print(vals)     # vals = val
     else:
 
         if len(sys.argv) < 3 or len(sys.argv) > 4 or sys.argv[1] != '-tidyup':
