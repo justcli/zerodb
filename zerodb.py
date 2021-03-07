@@ -280,7 +280,13 @@ if __name__ == '__main__':
             mydb = ZeroDB(sys.argv[i])
             keys = mydb.keys('*')
             for key in keys:
-                print(mydb.query(key))
+                vals = mydb.query(key)
+                if isinstance(vals, list):
+                    for val in vals:
+                        print(val)
+                else:
+                    # vals = val
+                    print(vals)
     else:
 
         if len(sys.argv) < 3 or len(sys.argv) > 4 or sys.argv[1] != '-tidyup':
