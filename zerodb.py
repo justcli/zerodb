@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 import sys
 import json
 import os
@@ -204,6 +205,19 @@ class ZeroDB:
 
 
 
+    def keys(self, pattern='*') -> list:
+        if not pattern:
+            return []
+        if pattern.startswith('*'):
+            pattern = pattern.replace('*', '[a-zA-Z0-9]', 1)
+        keys = []
+        for key in self._objmap:
+            if re.match(pattern, key):
+                keys.append(key)
+        return keys
+
+
+
     def tidyup(self, outfile):
         # tidyup removed entries
         if not self._dbfile:
@@ -261,6 +275,11 @@ if __name__ == '__main__':
         e = time.time()
         diff = float(e) - float(s)
         print('Storage   : ' + str(int(nr // diff)) + ' inserts / sec')
+    elif len(sys.argv) == 3 and sys.argv[1] == '-view':
+        mydb = ZeroDB(sys.argv[2])
+        keys = mydb.keys('*')
+        for key in keys:
+            print(key, ':', mydb.query(key))
     else:
 
         if len(sys.argv) < 3 or len(sys.argv) > 4 or sys.argv[1] != '-tidyup':
