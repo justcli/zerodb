@@ -275,11 +275,12 @@ if __name__ == '__main__':
         e = time.time()
         diff = float(e) - float(s)
         print('Storage   : ' + str(int(nr // diff)) + ' inserts / sec')
-    elif len(sys.argv) == 3 and sys.argv[1] == '-view':
-        mydb = ZeroDB(sys.argv[2])
-        keys = mydb.keys('*')
-        for key in keys:
-            print(key, ':', mydb.query(key))
+    elif len(sys.argv) >= 3 and sys.argv[1] == '-view':
+        for i in range(2, len(sys.argv)):
+            mydb = ZeroDB(sys.argv[i])
+            keys = mydb.keys('*')
+            for key in keys:
+                print(mydb.query(key))
     else:
 
         if len(sys.argv) < 3 or len(sys.argv) > 4 or sys.argv[1] != '-tidyup':
