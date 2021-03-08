@@ -13,11 +13,6 @@ cli_path="/usr/local/bin/"
 
 # copy the zerodb.py as module
 mkdir "$import_path"
-if [ $? -ne 0 ];then
-	echo "Unable to copy files to ""$import_path"\
-			 ". Try running the script as sudo e.g. > sudo ./install.sh"
-	exit 1
-fi
 import_path=$import_path"/"
 
 cp ./zerodb.py __init__.py "$import_path"
