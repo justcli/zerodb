@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-set -e
-
 which python3 1>/dev/null 2>&1
 if [ $? -ne 0 ];then
 	echo "Currently only works with python3"
@@ -12,7 +10,7 @@ import_path=`python3 -c "import sys;print(sys.path[-1] + '/zerodb')"`
 cli_path="/usr/local/bin/"
 
 # copy the zerodb.py as module
-mkdir "$import_path"
+mkdir "$import_path" 1>/dev/null 2>&1
 import_path=$import_path"/"
 
 cp ./zerodb.py __init__.py "$import_path"
