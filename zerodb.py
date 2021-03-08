@@ -7,6 +7,7 @@ import shutil
 import atexit
 import msgpack
 from io import BytesIO
+import re
 
 __all__ = ['ZeroDB']
 
@@ -44,6 +45,7 @@ def compile_n_run(raw, condition, dump=False):
 
 def cleanup(arg):
     if arg._dbfp:
+        print("flushed")
         arg._dbfp.flush()
         arg._dbfp.close()
 
@@ -113,16 +115,17 @@ class ZeroDB:
         myio = BytesIO(self._dbfp.read())
         it = msgpack.Unpacker(myio, raw=False)
         for obj in it:
+            print(obj)
             if expired(obj['t'], self._expiry):
                 continue
             if obj['a'] == '+':
                 d = {}
                 alias = obj['k']
+                d[alias] = [obj['v']]
                 try:
                     n = self._objmap[alias]
                     self._objlist[n][alias].append(d)
                 except KeyError:
-                    d[alias] = [obj['v']]
                     self._objlist.append(d)
                     self._objmap[alias] = len(self._objlist) - 1
                     self._adds += 1
@@ -168,7 +171,7 @@ class ZeroDB:
             return
         d = self._objlist.pop(n)
         del self._objmap[key]
-        d = {}
+        #d = {}
         d['a'] = '-'
         d['t'] = timestamp()
         if self._dbfile:
@@ -201,6 +204,20 @@ class ZeroDB:
             return 0
         n = self._objmap[key]
         return len(self._objlist[n][key])
+
+
+
+    def keys(self, like='*'):
+        keylist = []
+        if like == '':
+            return keylist
+        elif like.startswith('*'):
+            like = ''.join(['[a-zA-Z0-9]', like[1:]])
+
+        for key in self._objmap:
+            if re.match(like, key):
+                keylist.append(key)
+        return keylist
 
 
 
