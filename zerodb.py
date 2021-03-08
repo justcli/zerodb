@@ -119,11 +119,12 @@ class ZeroDB:
             if obj['a'] == '+':
                 d = {}
                 alias = obj['k']
-                d[alias] = [obj['v']]
                 try:
                     n = self._objmap[alias]
-                    self._objlist[n][alias].append(d)
+                    self._objlist[n][alias].append(obj['v'])
                 except KeyError:
+                    #alias = obj['k']
+                    d[alias] = [obj['v']]
                     self._objlist.append(d)
                     self._objmap[alias] = len(self._objlist) - 1
                     self._adds += 1
