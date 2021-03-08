@@ -45,7 +45,6 @@ def compile_n_run(raw, condition, dump=False):
 
 def cleanup(arg):
     if arg._dbfp:
-        print("flushed")
         arg._dbfp.flush()
         arg._dbfp.close()
 
