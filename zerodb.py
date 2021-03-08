@@ -115,7 +115,6 @@ class ZeroDB:
         myio = BytesIO(self._dbfp.read())
         it = msgpack.Unpacker(myio, raw=False)
         for obj in it:
-            print(obj)
             if expired(obj['t'], self._expiry):
                 continue
             if obj['a'] == '+':
