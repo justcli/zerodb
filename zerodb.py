@@ -4,6 +4,7 @@ import json
 import os
 import time
 import shutil
+import datetime
 import atexit
 import msgpack
 from io import BytesIO
@@ -11,47 +12,105 @@ import re
 
 __all__ = ['ZeroDB']
 
-def compile_n_run(raw, condition, dump=False):
-    rsp = {
-        'retcode': 0,
-        'msg' : None
-    }
+global logfp
+
+def error(msg):
+    global logfp
     try:
-        rsp_dict = json.loads(raw)
-        code = ('import os\n'
-                + 'raw=' + str(rsp_dict) + '\n'
-                + 'data=' + str(rsp_dict['data']) + '\n'
-                + 'header=' + str(rsp_dict['header']) + '\n'
-                + 'status_code=' + '\"' + str(rsp_dict['status_code']) + '\"\n'
-                + 'reason_phrase=' + '\"'
-                                + str(rsp_dict['reason_phrase']) + '\"\n'
-                + 'http_version=' + '\"' + str(rsp_dict['http_version'])
-                                + '\"\n'
-                + 'os.environ[\'unicorn\']=str(' + condition + ')\n')
-        print(code)
+        logfp
+    except NameError:
+        logfp = open('log_zerodb.txt', 'a+')
+    t = datetime.datetime.now().strftime("%H:%M:%S.%f")
+    msg = t + ': ' + str(msg)
+    print(msg, file=logfp)
+    if __name__ == '__main__':
+        print(msg, file=sys.stderr)
+
+
+
+def show_help():
+    print('Usage  :\n'
+          '       zerodb [-t|-d [<key-pattern>]|'
+          '-q [select=<key> where=<condition>]|-b|-k] '
+          '[<db filename>] {<output filename>}\n'
+          '       -t : tidyup or compact the database '
+          '(needs output filename)\n'
+          '       -d : dump the values stored against a given key '
+          'or key-pattern\n'
+          '       -q : query the values of the given key and select '
+          'ones matching the condition\n'
+          '       -b : benchmark ZeroDB\n'
+          '       -k : list all keys in the database\n'
+          'Example:\n'
+          '       > zerodb -t mydb newdb\n'
+          '       > zerodb -d mykey mydb\n'
+          '       > zerodb -q \'select mykey where .["grade"] > 5\'\n'
+          '       > zerodb -k mydb\n'
+          '       > zerodb -b')
+
+
+
+def compile_n_run(datalist, cond):
+    output = []
+    cond = cond.replace('.[', 'e[')
+    try:
+        code = ('for e in datalist:\n'
+                + '    if(' + cond + '):\n'
+                + '        output.append(e)\n'
+                )
         pycode = compile(code, '', 'exec')
         exec(pycode)
-        res = os.environ['unicorn']
-        rsp['retcode'] = 0
-        if not dump and (res == 'False'):
-            rsp['retcode'] = -1
-        if dump:
-            rsp['msg'] = res
     except Exception as e:
-        rsp['retcode'] = -1
-        rsp['msg'] = str(e)
-    return rsp
+        error(e)
+    return output
+
 
 
 def cleanup(arg):
     if arg._dbfp:
         arg._dbfp.flush()
         arg._dbfp.close()
+    try:
+        logfp
+        logfp.flush()
+        logfp.close()
+    except Exception:
+        pass
+
+
+
+def dump_raw(dbfile):
+    dbfile = os.path.expanduser(dbfile)
+    if not dbfile.endswith('.zdb'):
+        dbfile += '.zdb'
+
+    try:
+        dbfp = open(dbfile, "rb")
+        dbfp.seek(0)
+    except Exception:
+        error(f'Error opening the db file ({dbfile})')
+        exit(1)
+
+    myio = BytesIO(dbfp.read())
+    it = msgpack.Unpacker(myio, raw=False)
+    for obj in it:
+        print(obj)
+
 
 
 def timestamp() -> str:
     fmt = '%Y-%m-%d %H:%M:%S'
     return time.strftime(fmt)
+
+
+
+def remake_map(self):
+    self._objmap.clear()
+    i = 0
+    for e in self._objlist:
+        self._objmap[list(e.keys())[0]] = i
+        i += 1
+
 
 
 def expired(stamp, age) -> int:
@@ -69,7 +128,7 @@ def expired(stamp, age) -> int:
         unit = age[-1:]
         n = int(n) if unit in ['s', 'm', 'h', 'd'] else n['n']
     except Exception:
-        print('error expiry')
+        error('expiry not in n[s|m|h|d] format.')
         return -1
 
     stamp = datetime.strptime(stamp, fmt)
@@ -88,6 +147,7 @@ def expired(stamp, age) -> int:
     return 1
 
 
+
 class ZeroDB:
 
     def __init__(self, file=None, expiry=None):
@@ -101,13 +161,14 @@ class ZeroDB:
         if not file:
             return
         self._dbfile = os.path.expanduser(file)
+        if not self._dbfile.endswith('.zdb'):
+            self._dbfile += '.zdb'
 
         try:
             self._dbfp = open(self._dbfile, "ab+")
             self._dbfp.seek(0)
         except Exception:
-            print(f'Error opening the db file ({self._dbfile})',
-                  file=sys.stderr)
+            error(f'Error opening the db file ({self._dbfile})')
             exit(1)
 
         atexit.register(cleanup, self)
@@ -116,9 +177,9 @@ class ZeroDB:
         for obj in it:
             if expired(obj['t'], self._expiry):
                 continue
+            alias = obj['k']
             if obj['a'] == '+':
                 d = {}
-                alias = obj['k']
                 try:
                     n = self._objmap[alias]
                     self._objlist[n][alias].append(obj['v'])
@@ -126,19 +187,24 @@ class ZeroDB:
                     #alias = obj['k']
                     d[alias] = [obj['v']]
                     self._objlist.append(d)
-                    self._objmap[alias] = len(self._objlist) - 1
+                    #self._objmap[alias] = len(self._objlist) - 1
+                    remake_map(self)
                     self._adds += 1
             else:
                 n = self._objmap[alias]
-                alias = obj['k']
+                #alias = obj['k']
                 self._objlist.pop(n)
+                remake_map(self)
+                #self._objmap.pop(alias)
                 self._subs += 1
         try:
             x = (self._subs * 100) // (self._adds + self._subs)
             if x > 20:
-                print(f'{os.path.basename(self._dbfile)} can be compacted by \
-                      more than {x}%. You may run "zerodb -tidyup \
-                      <db filename>"')
+                print('This database can be compacted by '
+                      + f'more than {x}%. '
+                      + 'You may run "zerodb -tidyup '
+                      + f'{os.path.basename(self._dbfile)}"',
+                      file=sys.stderr)
         except Exception:
             pass
 
@@ -155,9 +221,9 @@ class ZeroDB:
             self._objmap[key] = len(self._objlist) - 1
         if self._dbfile:
             d = {}
+            d['a'] = '+'
             d['k'] = key
             d['v'] = val
-            d['a'] = '+'
             d['t'] = timestamp()
             self._dbfp.write(msgpack.packb(d, use_bin_type=True))
 
@@ -168,9 +234,12 @@ class ZeroDB:
             n = self._objmap[key]
         except KeyError:
             return
-        d = self._objlist.pop(n)
-        del self._objmap[key]
-        #d = {}
+        self._objlist.pop(n)
+        remake_map(self)
+        #del self._objmap[key]
+        d = {}
+        d['k'] = key
+        #d['v'] = obj[key]
         d['a'] = '-'
         d['t'] = timestamp()
         if self._dbfile:
@@ -178,15 +247,30 @@ class ZeroDB:
 
 
 
-    def query(self, key):
+    def query(self, select, where=None):
+        '''
+        Query the database with args:
+            select: name of the key
+            where : query to run against the value(s) of the matching keys
+        Example:
+            query('orders', '.["side"] == "buy"')
+            query('students', '.['marks'] > 90 and .['name'].startswith("a"))
+        '''
         try:
-            n = self._objmap[key]
+            n = self._objmap[select]
         except KeyError:
-            return None
-        obj = self._objlist[n][key]
+            return []
+        try:
+            obj = self._objlist[n][select]
+        except Exception as e:
+            error(e)
+            return []
         if len(obj) == 1:
             obj = obj[0]
-        return obj
+
+        if not where:
+            return obj
+        return compile_n_run(obj, where) 
 
 
 
@@ -203,6 +287,10 @@ class ZeroDB:
             return 0
         n = self._objmap[key]
         return len(self._objlist[n][key])
+
+
+    def close(self):
+        cleanup(self)
 
 
 
@@ -247,8 +335,6 @@ class ZeroDB:
         with open(outfile, 'wb+') as fp:
             for obj in filtered:
                 fp.write(msgpack.packb(obj, use_bin_type=True))
-        self._dbfp.close()
-        self._dbfp = None
 
 
 
@@ -257,8 +343,9 @@ if __name__ == '__main__':
     zerodb -tidyup <db file>  [<output file>]
     '''
     import gc
-    gc.disable()
-    if len(sys.argv) == 2 and sys.argv[1] == '-benchmark':
+    #gc.disable()
+    
+    if len(sys.argv) == 2 and sys.argv[1] == '-b':
         mydb = ZeroDB()
         s = time.time()
         nr = 1000000
@@ -268,7 +355,7 @@ if __name__ == '__main__':
         e = time.time()
         diff = float(e) - float(s)
         print('In-memory : ' + str(int(nr // diff)) + ' inserts / sec')
-        mydb = ZeroDB('mydb.zdb')
+        mydb = ZeroDB('zerodb.zdb')
         s = time.time()
         for i in range(nr):
             d = {'a': i}
@@ -276,23 +363,41 @@ if __name__ == '__main__':
         e = time.time()
         diff = float(e) - float(s)
         print('Storage   : ' + str(int(nr // diff)) + ' inserts / sec')
-    elif len(sys.argv) >= 3 and sys.argv[1] == '-view':
-        for i in range(2, len(sys.argv)):
-            mydb = ZeroDB(sys.argv[i])
-            keys = mydb.keys('*')
-            for key in keys:
-                vals = mydb.query(key)
-                if isinstance(vals, list):
-                    for val in vals:
-                        print(val)
-                else:
-                    print(vals)     # vals = val
-    else:
+        mydb.close()
+        mydb._dbfp = None
+        os.unlink('zerodb.zdb')
 
-        if len(sys.argv) < 3 or len(sys.argv) > 4 or sys.argv[1] != '-tidyup':
-            print('Usage:\n> zerodb -tidyup <db filename> <output filename>')
+    elif len(sys.argv) == 3 and sys.argv[1] == '-d':
+        # zerodb -d mykey mydb
+        mydb = ZeroDB(sys.argv[2])
+        keys = mydb.keys('*')
+        for key in keys:
+            print(f"key: {key}")
+            vals = mydb.query(key)
+            if isinstance(vals, list):
+                for val in vals:
+                    print(val)
+            else:
+                print(vals)
+
+    elif len(sys.argv) == 4 and sys.argv[1] == '-q':
+        # zerodb -q 'select mykey where .["name"] == "myname"' mydb
+        mydb = ZeroDB(sys.argv[3])
+        if not mydb:
+            error("Could not open the database")
             exit(1)
 
+        q = sys.argv[2].split(' ')
+        if q[0] != 'select' or q[2] != 'where':
+            show_help()
+            exit(1)
+        key = q[1]
+        cond = ' '.join(q[3:])
+
+        out = mydb.query(key, where=cond)
+        print(out)
+
+    elif len(sys.argv) == 3 and sys.argv[1] == '-t':
         try:
             mydb = ZeroDB(os.path.abspath(sys.argv[2]))
             dir = None
@@ -305,5 +410,22 @@ if __name__ == '__main__':
         except Exception as e:
             print(e, file=sys.stderr)
             exit(1)
+
+    elif len(sys.argv) == 3 and sys.argv[1] == '-r':
+        # print the raw data of the database
+        dump_raw(sys.argv[2])
+
+    elif len(sys.argv) == 3 and sys.argv[1] == '-k':
+        mydb = ZeroDB(sys.argv[2])
+        if not mydb:
+            error("Could not open the database file")
+            exit(1)
+        keys = mydb.keys()
+        print(keys)
+
+    else:
+        show_help()
+        exit(1)
+
     exit(0)
 
