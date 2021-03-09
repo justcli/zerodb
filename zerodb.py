@@ -344,7 +344,7 @@ if __name__ == '__main__':
     '''
     import gc
     #gc.disable()
-    
+ 
     if len(sys.argv) == 2 and sys.argv[1] == '-b':
         mydb = ZeroDB()
         s = time.time()
