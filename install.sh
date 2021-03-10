@@ -11,6 +11,15 @@ cli_path="/usr/local/bin/"
 
 # copy the zerodb.py as module
 mkdir "$import_path" 1>/dev/null 2>&1
+if [ $? -ne 0 ];then
+	echo "$import_path is already there."
+	echo -n "Overwrite it [y|n]:"
+	read -r choice
+	if [ -z "$choice" ] || [ "$choice" != "y" ]; then
+		echo "Installation aborted."
+		exit 1
+	fi
+fi
 import_path=$import_path"/"
 
 cp ./zerodb.py __init__.py "$import_path"
