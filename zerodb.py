@@ -289,6 +289,7 @@ class ZeroDB:
         return len(self._objlist[n][key])
 
 
+
     def close(self):
         cleanup(self)
 
@@ -343,9 +344,11 @@ if __name__ == '__main__':
     zerodb -tidyup <db file>  [<output file>]
     '''
     import gc
-    #gc.disable()
- 
+    gc.disable()
+
+    # do the benchmarking
     if len(sys.argv) == 2 and sys.argv[1] == '-b':
+        from random import randrange
         mydb = ZeroDB()
         s = time.time()
         nr = 1000000
@@ -355,6 +358,13 @@ if __name__ == '__main__':
         e = time.time()
         diff = float(e) - float(s)
         print('In-memory : ' + str(int(nr // diff)) + ' inserts / sec')
+        gc.collect()
+        s = time.time()
+        for i in range(nr):
+            mydb.query('key' + str(randrange(nr - 1)))
+        e = time.time()
+        qdiff = float(e) - float(s)
+        gc.collect()
         mydb = ZeroDB('zerodb.zdb')
         s = time.time()
         for i in range(nr):
@@ -363,10 +373,12 @@ if __name__ == '__main__':
         e = time.time()
         diff = float(e) - float(s)
         print('Storage   : ' + str(int(nr // diff)) + ' inserts / sec')
+        print('Query     : ' + str(int(nr // qdiff)) + ' queries / sec')
         mydb.close()
         mydb._dbfp = None
         os.unlink('zerodb.zdb')
 
+    # dump the key and value of all database entries
     elif len(sys.argv) == 3 and sys.argv[1] == '-d':
         # zerodb -d mykey mydb
         mydb = ZeroDB(sys.argv[2])
@@ -380,6 +392,7 @@ if __name__ == '__main__':
             else:
                 print(vals)
 
+    # query the database
     elif len(sys.argv) == 4 and sys.argv[1] == '-q':
         # zerodb -q 'select mykey where .["name"] == "myname"' mydb
         mydb = ZeroDB(sys.argv[3])
@@ -397,6 +410,7 @@ if __name__ == '__main__':
         out = mydb.query(key, where=cond)
         print(out)
 
+    # tidy-up the database
     elif len(sys.argv) == 3 and sys.argv[1] == '-t':
         try:
             mydb = ZeroDB(os.path.abspath(sys.argv[2]))
@@ -411,10 +425,12 @@ if __name__ == '__main__':
             print(e, file=sys.stderr)
             exit(1)
 
+    # dump the whole database in raw format
     elif len(sys.argv) == 3 and sys.argv[1] == '-r':
         # print the raw data of the database
         dump_raw(sys.argv[2])
 
+    # list all the keys of the database
     elif len(sys.argv) == 3 and sys.argv[1] == '-k':
         mydb = ZeroDB(sys.argv[2])
         if not mydb:
@@ -429,3 +445,4 @@ if __name__ == '__main__':
 
     exit(0)
 
+# vim : set ts=4 shiftwidth=4 expandtab ffs=unix
