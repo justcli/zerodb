@@ -85,6 +85,7 @@ Storage   : 176143 inserts / sec
 
 ## Ongoing feature
 ~Advanced Query : I am working on adding advanced querying support to it. It will be in *select that where this* format. It will allow querying complex json data in an intuitive and simple way.~
+Completed
 
 ## Contribute
 I would be happy to work with you if you are interested in contributing to this project. Just send me a mail.
