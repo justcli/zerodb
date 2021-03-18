@@ -10,7 +10,7 @@ import_path=`python3 -c "import sys;print(sys.path[-1] + '/zerodb')"`
 cli_path="/usr/local/bin/"
 
 # copy the zerodb.py as module
-mkdir "$import_path" 1>/dev/null 2>&1
+mkdir -p "$import_path" 1>/dev/null 2>&1
 if [ $? -ne 0 ];then
 	echo "$import_path is already there."
 	echo -n "Overwrite it [y|n]:"
@@ -22,7 +22,7 @@ if [ $? -ne 0 ];then
 fi
 import_path=$import_path"/"
 
-cp ./zerodb.py __init__.py "$import_path"
+cp -f ./zerodb.py __init__.py "$import_path"
 if [ $? -ne 0 ];then
 	echo "Unable to copy files to ""$import_path"\
 			 ". Try running the script as sudo e.g. > sudo ./install.sh"
@@ -33,9 +33,9 @@ echo "  __init__.py"
 echo "  zerodb.py"
 
 # copy tddish as cli app to the cli_path
-cp ./zerodb.py ./zerodb
+cp -f ./zerodb.py ./zerodb
 chmod 777 ./zerodb
-cp ./zerodb $cli_path
+cp -f ./zerodb $cli_path
 if [ $? -ne 0 ];then
 	echo "Unable to copy files to "$cli_path\
 	   	 ". Try running the script as sudo e.g. > sudo ./install.sh"
