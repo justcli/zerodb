@@ -36,11 +36,22 @@ Note above that two pieces of json data are inserted against the same key. zerod
 
 **query** : to get the data from the database
 ```
-students = mydb.query("studets")
+students = mydb.query("students")
 for student in students:
   print(student)
 ```
 The query always returns a list which can have one or many entries.
+
+Query with where clause (condition):
+```
+students = mydb.query("students", where='.["marks"] > 75')
+for student in students:
+  print(student)
+```
+or in commandline mode
+```
+> zerodb -q 'select student where .["grade"] > 75'
+```
 
 **remove** : to remove a key and all it's data
 ```
@@ -57,20 +68,20 @@ mydb.flush()
 
 You can also tidyup your database file using commandline.
 ```
-> zerodb -tidyup ./mydir/mydb.zdb mydb_new.zdb
+> zerodb -t ./mydir/mydb.zdb mydb_new.zdb
 or
-> zerodb -tidyup ./mydir/mydb.zdb > mydb_new.zdb
+> zerodb -t ./mydir/mydb.zdb > mydb_new.zdb
 > mv mydb_new.zdb mydb.zdb
 ```
 
 ## Benchmark
 You can benchmark *zerodb* by running the following command
 ```
-> zerodb -benchmark
+> zerodb -b
 ```
 On my Macbook (Core-i5, 8GB RAM running MacOS Mojave), I get the following results.
 ```
-> zerodb -benchmark
+> zerodb -b
 In-memory : 276480 inserts / sec
 Storage   : 84142 inserts / sec
 ```
@@ -78,7 +89,7 @@ Storage   : 84142 inserts / sec
 
 With gc maipulation, the benchmark on the same hardware is
 ```
-> zerodb -benchmark
+> zerodb -b
 In-memory : 724417 inserts / sec
 Storage   : 176143 inserts / sec
 ```
