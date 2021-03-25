@@ -211,6 +211,8 @@ class ZeroDB:
 
 
     def insert(self, key: str, val: any):
+        if not isinstance(key, str):
+            raise ValueError("Key can only be string")
         if key in self._objmap:
             n = self._objmap[key]
             self._objlist[n][key].append(val)
