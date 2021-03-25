@@ -44,7 +44,7 @@ def show_help():
           'Example:\n'
           '       > zerodb -t mydb newdb\n'
           '       > zerodb -d mykey mydb\n'
-          '       > zerodb -q \'select mykey where .["grade"] > 5\'\n'
+          '       > zerodb -q \'select mykey where .["grade"] > 5\' mydb\n'
           '       > zerodb -k mydb\n'
           '       > zerodb -b')
 
