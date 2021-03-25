@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import re
 import sys
 import json
 import os
@@ -8,7 +9,6 @@ import datetime
 import atexit
 import msgpack
 from io import BytesIO
-import re
 
 __all__ = ['ZeroDB']
 
@@ -298,11 +298,12 @@ class ZeroDB:
     def keys(self, pattern='*') -> list:
         if not pattern:
             return []
+        pattern = str(pattern)
         if pattern.startswith('*'):
             pattern = pattern.replace('*', '[a-zA-Z0-9]', 1)
         keys = []
         for key in self._objmap:
-            if re.match(pattern, key):
+            if re.match(pattern, str(key)):
                 keys.append(key)
         return keys
 
