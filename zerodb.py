@@ -10,7 +10,7 @@ import msgpack
 from io import BytesIO
 import re
 
-__all__ = ['ZeroDB']
+__all__ = ['Zdb', 'Zdict']
 
 global logfp
 
@@ -148,7 +148,7 @@ def expired(stamp, age) -> int:
 
 
 
-class ZeroDB:
+class Zdb:
 
     def __init__(self, file=None, expiry=None):
         global old_exception_handler
@@ -179,6 +179,7 @@ class ZeroDB:
                 continue
             alias = obj['k']
             if obj['a'] == '+':
+                # append new value
                 d = {}
                 try:
                     n = self._objmap[alias]
@@ -190,7 +191,18 @@ class ZeroDB:
                     #self._objmap[alias] = len(self._objlist) - 1
                     remake_map(self)
                     self._adds += 1
+            elif obj['a'] == '=':
+                # replace old value
+                d = {}
+                try:
+                    n = self._objmap[alias]
+                    self._objlist[n][alias] = [obj['v']]
+                except KeyError:
+                    d[alias] = [obj['v']]
+                    self._objlist.append(d)
+                    remake_map(self)
             else:
+                # delete the key
                 n = self._objmap[alias]
                 #alias = obj['k']
                 self._objlist.pop(n)
@@ -224,6 +236,25 @@ class ZeroDB:
         if self._dbfile:
             d = {}
             d['a'] = '+'
+            d['k'] = key
+            d['v'] = val
+            d['t'] = timestamp()
+            self._dbfp.write(msgpack.packb(d, use_bin_type=True))
+
+
+
+    def replace(self, key: str, val: any):
+        if not isinstance(key, str):
+            raise ValueError("Key can only be string")
+        if key not in self._objmap:
+            self._objmap[key] = len(self._objlist) - 1
+        dat = {}
+        dat[key] = [val]
+        self._objlist.append(dat)
+        self._objmap[key] = len(self._objlist) - 1
+        if self._dbfile:
+            d = {}
+            d['a'] = '='
             d['k'] = key
             d['v'] = val
             d['t'] = timestamp()
@@ -267,8 +298,8 @@ class ZeroDB:
         except Exception as e:
             error(e)
             return []
-        if len(obj) == 1:
-            obj = obj[0]
+        #if len(obj) == 1:
+        #    obj = obj[0]
 
         if not where:
             return obj
@@ -351,7 +382,7 @@ if __name__ == '__main__':
     # do the benchmarking
     if len(sys.argv) == 2 and sys.argv[1] == '-b':
         from random import randrange
-        mydb = ZeroDB()
+        mydb = Zdb()
         s = time.time()
         nr = 1000000
         for i in range(nr):
@@ -367,7 +398,7 @@ if __name__ == '__main__':
         e = time.time()
         qdiff = float(e) - float(s)
         gc.collect()
-        mydb = ZeroDB('zerodb.zdb')
+        mydb = Zdb('zerodb.zdb')
         s = time.time()
         for i in range(nr):
             d = {'a': i}
@@ -383,8 +414,8 @@ if __name__ == '__main__':
     # dump the key and value of all database entries
     elif len(sys.argv) == 3 and sys.argv[1] == '-d':
         # zerodb -d mykey mydb
-        mydb = ZeroDB(sys.argv[2])
-        keys = mydb.keys('*')
+        mydb = Zdb(sys.argv[2])
+        keys = mydb.keys()
         for key in keys:
             print(f"key: {key}")
             vals = mydb.query(key)
@@ -397,17 +428,22 @@ if __name__ == '__main__':
     # query the database
     elif len(sys.argv) == 4 and sys.argv[1] == '-q':
         # zerodb -q 'select mykey where .["name"] == "myname"' mydb
-        mydb = ZeroDB(sys.argv[3])
+        mydb = Zdb(sys.argv[3])
         if not mydb:
             error("Could not open the database")
             exit(1)
 
         q = sys.argv[2].split(' ')
+        if len(q) < 4:
+            show_help()
+            exit(1)
         if q[0] != 'select' or q[2] != 'where':
             show_help()
             exit(1)
         key = q[1]
         cond = ' '.join(q[3:])
+        if cond == "*" or cond == ".":
+            cond = None
 
         out = mydb.query(key, where=cond)
         print(out)
@@ -415,7 +451,7 @@ if __name__ == '__main__':
     # tidy-up the database
     elif len(sys.argv) == 3 and sys.argv[1] == '-t':
         try:
-            mydb = ZeroDB(os.path.abspath(sys.argv[2]))
+            mydb = Zdb(os.path.abspath(sys.argv[2]))
             dir = None
             fp = sys.stdout
             if len(sys.argv) == 4:
@@ -434,7 +470,7 @@ if __name__ == '__main__':
 
     # list all the keys of the database
     elif len(sys.argv) == 3 and sys.argv[1] == '-k':
-        mydb = ZeroDB(sys.argv[2])
+        mydb = Zdb(sys.argv[2])
         if not mydb:
             error("Could not open the database file")
             exit(1)
@@ -446,5 +482,68 @@ if __name__ == '__main__':
         exit(1)
 
     exit(0)
+
+
+# Zdb-backed dict class
+class Zdict():
+    def __init__(self, objname, zdbfile):
+        self._obj = {}
+        self._objname = objname
+        self._zdbfile = zdbfile
+        self._zdb = Zdb(zdbfile)
+        if not self._zdb:
+            raise ValueError("zdb object missing")
+
+    def __del__(self):
+        self._zdb = Zdb(self._zdbfile)
+        self._zdb.replace(self._objname, self._obj)
+        self._zdb.flush()
+        self._zdb.close()
+
+    def sync(self):
+        val = self._zdb.query(self._objname)[0]
+        if val:
+            for k,v in val.items():
+                self._obj.__setitem__(k, v)
+
+    def clear(self):
+        self._obj.clear()
+
+    def copy(self):
+        return self._obj.copy()
+
+    def get(self, key):
+        return self._obj.get(key)
+
+    def items(self):
+        return self._obj.items()
+
+    def keys(self):
+        return self._obj._keys()
+
+    def pop(self, key, val=None):
+        self._obj.pop(key, val)
+
+    def setdefault(self, key, value):
+        self._obj.setdefault(key, value)
+
+    def update(self, obj):
+        self._obj.update(obj)
+
+    def values(self):
+        return self._obj.values()
+
+    def __getitem__(self, key):
+        return self._obj.__getitem__(key)
+
+    def __setitem__(self, key, value):
+        self._obj.__setitem__(key, value)
+
+    def __str__(self):
+        return str(self._obj)
+
+    def __iter__(self):
+        return self.obj.__iter__()
+
 
 # vim : set ts=4 shiftwidth=4 expandtab ffs=unix
