@@ -22,7 +22,7 @@ if [ $? -ne 0 ];then
 fi
 import_path=$import_path"/"
 
-cp -f ./zerodb.py __init__.py "$import_path"
+cp -f ./zerodb.py ./zdict.py ./zlist.py zint.py __init__.py "$import_path"
 if [ $? -ne 0 ];then
 	echo "Unable to copy files to ""$import_path"\
 			 ". Try running the script as sudo e.g. > sudo ./install.sh"
@@ -31,6 +31,9 @@ fi
 echo Files copied to "$import_path":
 echo "  __init__.py"
 echo "  zerodb.py"
+echo "  zdict.py"
+echo "  zlist.py"
+echo "  zint.py"
 
 # copy tddish as cli app to the cli_path
 cp -f ./zerodb.py ./zerodb
