@@ -9,9 +9,10 @@ from tempfile import gettempdir
 
 """
 Usage:
-    > mydict = Zdict("mydict_unique_name").load()
-    > mydict
-    {'key': 'value'}
+    mydict = Zdict("mydict_unique_name", restart_time=60).load()
+    restart_time : If the app is not restarted before this time, the store
+                   of the dict variable will be deleted.
+                   If not specified, restart_time default value is 3600s
 """
 __all__ = ['Zdict']
 
@@ -24,14 +25,14 @@ def _save_var(self):
 
 # Zdb-backed dict class
 class Zdict(dict):
-    def __init__(self, objname):
+    def __init__(self, objname, restart_time=3600):
         self._obj = {}
         self._objname = objname
         self._zdictfile = gettempdir() + '/' + objname
         try:
             tm = os.stat(self._zdictfile).st_atime
             now = time.time()
-            if now - tm > 3600:
+            if now - tm > restart_time:
                 # zdict file is more than 1hr old...dump it
                 raise ValueError("Old zdict file")
             self._zdictfp = open(self._zdictfile, "rb")
