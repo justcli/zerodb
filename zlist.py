@@ -1,0 +1,51 @@
+#!/usr/bin/env python3
+import os
+import time
+import atexit
+import msgpack
+from io import BytesIO
+from tempfile import gettempdir
+
+__all__ = ['Zlist']
+
+def _save_var(self):
+    self._zlistfp = open(self._zlistfile, "wb")
+    self._zlistfp.write(msgpack.packb(self._obj, use_bin_type=True))
+    self._zlistfp.flush()
+    self._zlistfp.close()
+
+
+# Zdb-backed list class
+class Zlist(list):
+    def __init__(self, objname):
+        self._obj = []
+        self._objname = objname
+        self._zlistfile = gettempdir() + '/' + objname
+        try:
+            tm = os.stat(self._zlistfile).st_atime
+            now = time.time()
+            if now - tm > 3600:
+                # zlist file is more than 1hr old...dump it
+                raise ValueError("Old zlist file")
+            self._zlistfp = open(self._zlistfile, "rb")
+        except Exception:
+            self._zlistfp = open(self._zlistfile, "wb+") 
+            if not self._zlistfp:
+                raise ValueError("Unable to create backup file")
+        self._zlistfp.close()
+        atexit.register(_save_var, self)
+
+
+    def load(self):
+        self._zlistfp = open(self._zlistfile, "rb")
+        myio = BytesIO(self._zlistfp.read())
+        it = msgpack.Unpacker(myio, raw=False)
+        self._zlistfp.close()
+        if not it:
+            return self._obj
+        for obj in it:
+            self._obj = obj
+        return self._obj
+
+
+
