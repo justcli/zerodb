@@ -25,7 +25,7 @@ def _save_var(self):
 # Zdb-backed int class
 class Zint(list):
     def __init__(self, objname, restart_time=3600):
-        self._obj = []
+        self._obj = 0
         self._objname = objname
         self._zintfile = gettempdir() + '/' + objname
         try:
@@ -43,13 +43,13 @@ class Zint(list):
         atexit.register(_save_var, self)
 
 
-    def load(self):
+    def load(self, default=0):
         self._zintfp = open(self._zintfile, "rb")
         myio = BytesIO(self._zintfp.read())
         it = msgpack.Unpacker(myio, raw=False)
         self._zintfp.close()
         if not it:
-            return self._obj
+            return default
         for obj in it:
             self._obj = obj
         return self._obj
