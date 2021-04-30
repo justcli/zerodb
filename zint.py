@@ -16,6 +16,8 @@ Usage:
 __all__ = ['Zint']
 
 def _save_var(self):
+    if not self._active:
+        return
     self._zintfp = open(self._zintfile, "wb")
     self._zintfp.write(msgpack.packb(self._obj, use_bin_type=True))
     self._zintfp.flush()
@@ -23,10 +25,12 @@ def _save_var(self):
 
 
 # Zdb-backed int class
-class Zint(list):
+class Zint():
     def __init__(self, objname, restart_time=3600):
         self._obj = 0
         self._objname = objname
+        self._active = 1
+        self._restart_time = restart_time
         self._zintfile = gettempdir() + '/' + objname
         try:
             tm = os.stat(self._zintfile).st_atime
@@ -43,16 +47,85 @@ class Zint(list):
         atexit.register(_save_var, self)
 
 
-    def load(self, default=0):
+    def load(self):
         self._zintfp = open(self._zintfile, "rb")
         myio = BytesIO(self._zintfp.read())
         it = msgpack.Unpacker(myio, raw=False)
         self._zintfp.close()
         if not it:
-            return default
+            return self
         for obj in it:
             self._obj = obj
-        return self._obj
+        return self
 
+    def __disable(self):
+        self._active = 0
+        self._zintfp.close()
+
+    def __set(self, val):
+        self._obj = val
+
+    def __str__(self):
+        return str(self._obj)
+
+    def __add__(self, b):
+        self.__disable()
+        n = Zint(self._objname, restart_time=self._restart_time).load()
+        n.__set(self._obj + b)
+        return n
+
+    def __iadd__(self, b):
+        self._obj = self._obj + b
+        return self
+
+    def __sub__(self, b):
+        self.__disable()
+        n = Zint(self._objname, restart_time=self._restart_time).load()
+        n.__set(self._obj - b)
+        return n
+
+    def __isub__(self, b):
+        self._obj = self._obj - b
+        return self
+
+    def __mul__(self, b):
+        self.__disable()
+        n = Zint(self._objname, restart_time=self._restart_time).load()
+        n.__set(self._obj * b)
+        return n
+
+    def __imul__(self, b):
+        self._obj = self._obj * b
+        return self
+
+    def __div__(self, b):
+        self.__disable()
+        n = Zint(self._objname, restart_time=self._restart_time).load()
+        n.__set(self._obj / b)
+        return n
+
+    def __idiv__(self, b):
+        self._obj = self._obj / b
+        return self
+
+    def __floordiv__(self, b):
+        self.__disable()
+        n = Zint(self._objname, restart_time=self._restart_time).load()
+        n.__set(self._obj // b)
+        return n
+
+    def __ifloordiv__(self, b):
+        self._obj = self._obj // b
+        return self
+
+    def __mod__(self, b):
+        self.__disable()
+        n = Zint(self._objname, restart_time=self._restart_time).load()
+        n.__set(self._obj % b)
+        return n
+
+    def __imod__(self, b):
+        self._obj = self._obj % b
+        return self
 
 
