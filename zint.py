@@ -26,8 +26,11 @@ def _save_var(self):
 
 # Zdb-backed int class
 class Zint():
-    def __init__(self, objname, restart_time=3600):
-        self._obj = 0
+    def __init__(self, objname, default=0, restart_time=3600):
+        if not isinstance(default, int):
+            raise ValueError("Default value is must be int, "
+                             f"{type(default)} given")
+        self._obj = default
         self._objname = objname
         self._active = 1
         self._restart_time = restart_time
@@ -127,5 +130,8 @@ class Zint():
     def __imod__(self, b):
         self._obj = self._obj % b
         return self
+
+    def __repr__(self):
+        return f"Zint[intvalue: {self._obj}]"
 
 
