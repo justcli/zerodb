@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 import os
 import time
+import sys
 import atexit
 import msgpack
 from io import BytesIO
@@ -72,66 +73,57 @@ class Zint():
         return str(self._obj)
 
     def __add__(self, b):
-        self.__disable()
-        n = Zint(self._objname, restart_time=self._restart_time).load()
-        n.__set(self._obj + b)
-        return n
+        self._obj = self._obj + b
+        return self
 
     def __iadd__(self, b):
         self._obj = self._obj + b
         return self
 
     def __sub__(self, b):
-        self.__disable()
-        n = Zint(self._objname, restart_time=self._restart_time).load()
-        n.__set(self._obj - b)
-        return n
+        self._obj = self._obj - b
+        return self
 
     def __isub__(self, b):
         self._obj = self._obj - b
         return self
 
     def __mul__(self, b):
-        self.__disable()
-        n = Zint(self._objname, restart_time=self._restart_time).load()
-        n.__set(self._obj * b)
-        return n
+        self._obj = self._obj * b
+        return self
 
     def __imul__(self, b):
         self._obj = self._obj * b
         return self
 
     def __div__(self, b):
-        self.__disable()
-        n = Zint(self._objname, restart_time=self._restart_time).load()
-        n.__set(self._obj / b)
-        return n
+        self._obj = self._obj / b
+        return self
 
     def __idiv__(self, b):
         self._obj = self._obj / b
         return self
 
     def __floordiv__(self, b):
-        self.__disable()
-        n = Zint(self._objname, restart_time=self._restart_time).load()
-        n.__set(self._obj // b)
-        return n
+        self._obj = self._obj // b
+        return self
 
     def __ifloordiv__(self, b):
         self._obj = self._obj // b
         return self
 
     def __mod__(self, b):
-        self.__disable()
-        n = Zint(self._objname, restart_time=self._restart_time).load()
-        n.__set(self._obj % b)
-        return n
+        self._obj = self._obj % b
+        return self
+        #self.__disable()
+        #n = Zint(self._objname, restart_time=self._restart_time).load()
+        #n.__set(self._obj % b)
+        #return n
 
     def __imod__(self, b):
         self._obj = self._obj % b
         return self
 
     def __repr__(self):
-        return f"Zint[intvalue: {self._obj}]"
-
+        return f"Zint[intvalue: {self._obj}, file:{self._zintfile}]"
 
