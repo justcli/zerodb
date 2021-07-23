@@ -25,13 +25,13 @@ def _save_var(self):
 
 # Zdb-backed dict class
 class Zdict(dict):
-    def __init__(self, objname, default={}, restart_time=3600):
+    def __init__(self, objname, default={}, restart_time=60, namespace=''):
         if not isinstance(default, dict):
             raise ValueError(f"Default value is must be {type({})}, "
                              f"{type(default)} given")
         self._obj = default
         self._objname = objname
-        self._zdictfile = gettempdir() + '/' + objname
+        self._zdictfile = gettempdir() + '/' + namespace + '_' + objname
         try:
             tm = os.stat(self._zdictfile).st_atime
             now = time.time()
