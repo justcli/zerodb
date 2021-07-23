@@ -24,13 +24,13 @@ def _save_var(self):
 
 # Zdb-backed list class
 class Zlist(list):
-    def __init__(self, objname, default=[], restart_time=3600):
+    def __init__(self, objname, default=[], restart_time=60, namespace=''):
         if not isinstance(default, list):
             raise ValueError(f"Default value is must be {type([])}, "
                              f"{type(default)} given")
         self._obj = default
         self._objname = objname
-        self._zlistfile = gettempdir() + '/' + objname
+        self._zlistfile = gettempdir() + '/' + namespace + '_' + objname
         try:
             tm = os.stat(self._zlistfile).st_atime
             now = time.time()
