@@ -10,7 +10,7 @@ import msgpack
 from io import BytesIO
 import re
 
-__all__ = ['Zdb', 'Zdict']
+__all__ = ['Zdb']
 
 global logfp
 
@@ -482,68 +482,6 @@ if __name__ == '__main__':
         exit(1)
 
     exit(0)
-
-
-# Zdb-backed dict class
-class Zdict():
-    def __init__(self, objname, zdbfile):
-        self._obj = {}
-        self._objname = objname
-        self._zdbfile = zdbfile
-        self._zdb = Zdb(zdbfile)
-        if not self._zdb:
-            raise ValueError("zdb object missing")
-
-    def __del__(self):
-        self._zdb = Zdb(self._zdbfile)
-        self._zdb.replace(self._objname, self._obj)
-        self._zdb.flush()
-        self._zdb.close()
-
-    def sync(self):
-        val = self._zdb.query(self._objname)[0]
-        if val:
-            for k,v in val.items():
-                self._obj.__setitem__(k, v)
-
-    def clear(self):
-        self._obj.clear()
-
-    def copy(self):
-        return self._obj.copy()
-
-    def get(self, key):
-        return self._obj.get(key)
-
-    def items(self):
-        return self._obj.items()
-
-    def keys(self):
-        return self._obj._keys()
-
-    def pop(self, key, val=None):
-        self._obj.pop(key, val)
-
-    def setdefault(self, key, value):
-        self._obj.setdefault(key, value)
-
-    def update(self, obj):
-        self._obj.update(obj)
-
-    def values(self):
-        return self._obj.values()
-
-    def __getitem__(self, key):
-        return self._obj.__getitem__(key)
-
-    def __setitem__(self, key, value):
-        self._obj.__setitem__(key, value)
-
-    def __str__(self):
-        return str(self._obj)
-
-    def __iter__(self):
-        return self.obj.__iter__()
 
 
 # vim : set ts=4 shiftwidth=4 expandtab ffs=unix
