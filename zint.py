@@ -27,7 +27,7 @@ def _save_var(self):
 
 # Zdb-backed int class
 class Zint():
-    def __init__(self, objname, default=0, restart_time=3600):
+    def __init__(self, objname, default=0, restart_time=60, namespace=''):
         if not isinstance(default, int):
             raise ValueError("Default value is must be int, "
                              f"{type(default)} given")
@@ -35,7 +35,7 @@ class Zint():
         self._objname = objname
         self._active = 1
         self._restart_time = restart_time
-        self._zintfile = gettempdir() + '/' + objname
+        self._zintfile = gettempdir() + '/' + namespace + '_' + objname
         try:
             tm = os.stat(self._zintfile).st_atime
             now = time.time()
